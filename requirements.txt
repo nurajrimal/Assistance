@@ -1,0 +1,10 @@
+openai-whisper
+gtts
+pyaudio
+sounddevice
+numpy
+scipy
+google-generativeai
+python-dotenv
+playsound==1.2.2
+colorama
