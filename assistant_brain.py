@@ -1,11 +1,12 @@
 # ============================================================
 #  assistant_brain.py  —  The "brain": understands & responds
-#  Uses Google Gemini API instead of Anthropic Claude
+#  Uses Google Gemini API (new google.genai package)
 # ============================================================
 
 import re
 import datetime
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from colorama import Fore, Style
 from config import GEMINI_API_KEY, GEMINI_MODEL, SYSTEM_PROMPT, ASSISTANT_NAME
 
@@ -13,17 +14,17 @@ from config import GEMINI_API_KEY, GEMINI_MODEL, SYSTEM_PROMPT, ASSISTANT_NAME
 # ── Built-in rules (fast, no API needed) ─────────────────────
 
 BUILTIN_RESPONSES = {
-    r"समय|time|बज्यो|clock":            lambda: _get_time(),
-    r"मिति|date|आजको|today":            lambda: _get_date(),
-    r"नमस्ते|नमस्कार|hello|hi\b|hey":  lambda: f"नमस्ते! म {ASSISTANT_NAME} हुँ। आज तपाईंको के सहायता गर्न सक्छु? 😊",
+    r"समय|time|बज्यो|clock":             lambda: _get_time(),
+    r"मिति|date|आजको|today":             lambda: _get_date(),
+    r"नमस्ते|नमस्कार|hello|hi\b|hey":   lambda: f"नमस्ते! म {ASSISTANT_NAME} हुँ। आज तपाईंको के सहायता गर्न सक्छु? 😊",
     r"तिम्रो नाम|your name|तपाईंको नाम": lambda: f"मेरो नाम {ASSISTANT_NAME} हो। म तपाईंको नेपाली AI सहायक हुँ। 🤖",
-    r"राजधानी|capital":                 lambda: "नेपालको राजधानी काठमाडौं हो। यो हिमालयको काखमा रहेको ऐतिहासिक शहर हो। 🏔️",
-    r"जनसंख्या|population":             lambda: "नेपालको जनसंख्या लगभग ३ करोड छ। 📊",
-    r"जोक|joke|मजाक|हाँसो":            lambda: _get_joke(),
-    r"धन्यवाद|thank|सुक्रिया":          lambda: "स्वागत छ! अरू केही सहायता चाहियो भने सोध्नुस्। 🙏",
-    r"बाई|bye|विदाई|अलविदा":            lambda: "फेरि भेटौंला! शुभकामना। 🙏",
+    r"राजधानी|capital":                  lambda: "नेपालको राजधानी काठमाडौं हो। 🏔️",
+    r"जनसंख्या|population":              lambda: "नेपालको जनसंख्या लगभग ३ करोड छ। 📊",
+    r"जोक|joke|मजाक|हाँसो":             lambda: _get_joke(),
+    r"धन्यवाद|thank|सुक्रिया":           lambda: "स्वागत छ! अरू केही सहायता चाहियो भने सोध्नुस्। 🙏",
+    r"बाई|bye|विदाई|अलविदा":             lambda: "फेरि भेटौंला! शुभकामना। 🙏",
     r"कस्तो छ|कस्तो हुनुहुन्छ|how are you": lambda: "म ठीक छु, धन्यवाद! तपाईं कस्तो हुनुहुन्छ? 😊",
-    r"नेपाल.*बारे|about nepal":         lambda: "नेपाल दक्षिण एशियामा अवस्थित एक सुन्दर पहाडी देश हो। यहाँ सगरमाथा (८,८४९ मिटर) सहित विश्वका सबैभन्दा अग्ला हिमालहरू छन्। 🏔️",
+    r"नेपाल.*बारे|about nepal":          lambda: "नेपाल दक्षिण एशियामा अवस्थित एक सुन्दर पहाडी देश हो। सगरमाथा (८,८४९ मिटर) यहीं छ। 🏔️",
 }
 
 
@@ -47,69 +48,63 @@ def _get_joke() -> str:
         "एकपटक एउटा कम्प्युटरले गाना गाउन थाल्यो — बाइट-बाइट सुनिन्थ्यो! 😄",
         "प्रोग्रामरलाई किन जंगल मन पर्छ? किनभने त्यहाँ धेरै 'tree structure' हुन्छ! 🌲",
         "Python programmer ले किन coffee पिउँछन्? किनभने Java मन पर्दैन! ☕",
-        "Bug fix गरेपछि अर्को bug — यही नै programmer को जीवन हो! 🐛",
     ]
     return random.choice(jokes)
 
 
-# ── Gemini client (initialized once) ─────────────────────────
+# ── Gemini client ─────────────────────────────────────────────
 
-_gemini_model = None
+_client = None
 
-def _get_gemini_model():
-    global _gemini_model
-    if _gemini_model is None:
+def _get_client():
+    global _client
+    if _client is None:
         if not GEMINI_API_KEY or GEMINI_API_KEY == "your_gemini_key_here":
             return None
-        genai.configure(api_key=GEMINI_API_KEY)
-        _gemini_model = genai.GenerativeModel(
-            model_name=GEMINI_MODEL,
-            system_instruction=SYSTEM_PROMPT
-        )
-    return _gemini_model
+        _client = genai.Client(api_key=GEMINI_API_KEY)
+    return _client
 
 
 # ── Main brain function ───────────────────────────────────────
 
 def get_response(user_text: str, conversation_history: list = None) -> str:
-    """
-    Get assistant response for user input.
-    Checks built-in rules first, then calls Gemini API.
-    """
     if not user_text.strip():
         return "मैले तपाईंको कुरा बुझिनँ। कृपया फेरि भन्नुहोस्।"
 
     text_lower = user_text.lower()
 
-    # 1. Fast built-in responses (no API call)
+    # 1. Fast built-in responses
     for pattern, response_fn in BUILTIN_RESPONSES.items():
         if re.search(pattern, text_lower, re.IGNORECASE):
             print(f"{Fore.MAGENTA}💡 Built-in response.{Style.RESET_ALL}")
             return response_fn()
 
-    # 2. Gemini API for everything else
+    # 2. Gemini API
     print(f"{Fore.CYAN}🧠 Gemini सोच्दैछ...{Style.RESET_ALL}")
     return _call_gemini(user_text, conversation_history or [])
 
 
 def _call_gemini(user_text: str, history: list) -> str:
-    """Call Gemini API with conversation history for multi-turn chat."""
-    model = _get_gemini_model()
-
-    if model is None:
+    client = _get_client()
+    if client is None:
         return "API key राखिएको छैन। .env फाइलमा GEMINI_API_KEY थप्नुहोस्।"
 
     try:
-        # Convert history format → Gemini format
-        # history items: {"role": "user"/"assistant", "content": "..."}
-        gemini_history = []
+        # Build contents from history + new message
+        contents = []
         for msg in history:
             role = "user" if msg["role"] == "user" else "model"
-            gemini_history.append({"role": role, "parts": [msg["content"]]})
+            contents.append(types.Content(role=role, parts=[types.Part(text=msg["content"])]))
+        contents.append(types.Content(role="user", parts=[types.Part(text=user_text)]))
 
-        # Start a chat session with history
-        chat = model.start_chat(history=gemini_history)
-        response = chat.send_message(user_text)
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=contents,
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                max_output_tokens=300,
+            )
+        )
         return response.text.strip()
 
     except Exception as e:
@@ -119,12 +114,11 @@ def _call_gemini(user_text: str, history: list) -> str:
         if "quota" in err or "limit" in err:
             return "API limit पुग्यो। केही बेर पर्खनुहोस्।"
         print(f"{Fore.RED}❌ Gemini त्रुटि: {e}{Style.RESET_ALL}")
-        return "माफ गर्नुस्, अहिले जवाफ दिन सकिएन। पुनः प्रयास गर्नुहोस्।"
+        return "माफ गर्नुस्, अहिले जवाफ दिन सकिएन।"
 
 
 if __name__ == "__main__":
-    # Test without voice
-    print("🧠 Brain test mode (type 'quit' to exit)\n")
+    print("🧠 Brain test (type 'quit' to exit)\n")
     history = []
     while True:
         user = input("तपाईं: ")

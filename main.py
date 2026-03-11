@@ -16,7 +16,7 @@ init(autoreset=True)
 BANNER = f"""
 {Fore.RED}╔══════════════════════════════════════════╗
 ║  {Fore.WHITE}  मित्र  —  Nepali Voice Assistant  {Fore.RED}   ║
-║  {Fore.YELLOW}  Powered by Whisper + Claude AI    {Fore.RED}   ║
+║  {Fore.YELLOW}  Powered by Whisper + Gemini AI    {Fore.RED}   ║
 ╚══════════════════════════════════════════╝{Style.RESET_ALL}
 """
 
@@ -141,9 +141,9 @@ def check_setup():
         issues.append("⚠️  .env file छैन। .env.example बाट copy गर्नुहोस्।")
 
     # Check API key
-    from config import ANTHROPIC_API_KEY
-    if not ANTHROPIC_API_KEY or ANTHROPIC_API_KEY == "your_api_key_here":
-        issues.append("⚠️  ANTHROPIC_API_KEY .env मा राखिएको छैन। Built-in responses मात्र काम गर्नेछन्।")
+    from config import GEMINI_API_KEY
+    if not GEMINI_API_KEY or GEMINI_API_KEY == "your_gemini_key_here":
+        issues.append("⚠️  GEMINI_API_KEY .env मा राखिएको छैन। Built-in responses मात्र काम गर्नेछन्।")
 
     if issues:
         print(f"\n{Fore.YELLOW}Setup चेतावनीहरू:{Style.RESET_ALL}")
