@@ -3,7 +3,7 @@
 A full Python voice assistant that understands and speaks Nepali.
 
 ```
-Your Voice → Whisper (STT) → Claude AI (Brain) → gTTS (TTS) → Nepali Audio
+Your Voice → Whisper (STT) → AI (Brain) → gTTS (TTS) → Nepali Audio
 ```
 
 ---
